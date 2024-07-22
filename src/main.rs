@@ -72,7 +72,7 @@ fn run_app() -> Result<(), AppError> {
             // simple check to see if we can read the file
             File::open(&filename).map_err(CliError::FileReadError)?;
 
-            let config = AppConfig::load("Config.toml")?;
+            let config = AppConfig::load("config/Compiler.toml")?;
             info!("Config file read successful");
 
             compile_with(
@@ -122,4 +122,3 @@ fn compile_with(
     info!("{} compilation successful", compiler_type.name());
     Ok(())
 }
-

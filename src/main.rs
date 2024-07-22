@@ -4,6 +4,8 @@ mod config;
 use crate::cli::{Cli, CliError, Mode};
 use crate::config::{AppConfig, ConfigError};
 use clap::Parser;
+use env_logger::Env;
+use log::{error, info};
 use std::fs::File;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
@@ -36,9 +38,22 @@ impl Compiler {
     }
 }
 
+fn init_logger() {
+    let env = Env::default()
+        .filter_or("RUST_LOG", "info") // default log level is set to info
+        .write_style_or("RUST_LOG_STYLE", "always");
+
+    env_logger::Builder::from_env(env)
+        .format_level(true)
+        .format_timestamp(None)
+        .init()
+}
+
 fn main() -> ExitCode {
+    init_logger();
+
     if let Err(e) = run_app() {
-        eprintln!("{}", e);
+        error!("{}", e);
         return ExitCode::FAILURE;
     }
     ExitCode::SUCCESS
@@ -53,10 +68,12 @@ fn run_app() -> Result<(), AppError> {
                 let error_msg = format!("file '{}' does not exist", filename.display());
                 return Err(CliError::InvalidPath(error_msg).into());
             }
+
             // simple check to see if we can read the file
             File::open(&filename).map_err(CliError::FileReadError)?;
 
             let config = AppConfig::load("Config.toml")?;
+            info!("Config file read successful");
 
             compile_with(
                 &config.gccrs.path,
@@ -81,7 +98,7 @@ fn compile_with(
     args: &[String],
     compiler_type: Compiler,
 ) -> Result<(), AppError> {
-    println!(
+    info!(
         "Compiling '{}' with {}",
         src_file_path.display(),
         compiler_type.name()
@@ -95,14 +112,14 @@ fn compile_with(
         })?;
 
     if !status.success() {
-        return Err(AppError::Compilation(format!(
-            "{} compilation failed with exit code: {}",
+        let err = format!(
+            "{} compilation failed with {}",
             compiler_type.name(),
             status
-        )));
+        );
+        return Err(AppError::Compilation(err));
     }
-
-    println!("{} compilation successful", compiler_type.name());
+    info!("{} compilation successful", compiler_type.name());
     Ok(())
 }
 

@@ -1,0 +1,14 @@
+[rustc]
+path = "" # path to rustc
+args = [
+      "-o",
+      "rustc.out"
+    ]
+
+[gccrs]
+path = "" # path to gccrs 
+args = [
+      "-frust-incomplete-and-experimental-compiler-do-not-use",
+      "-o",
+      "gccrs.out"
+    ]

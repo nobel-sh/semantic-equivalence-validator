@@ -1,0 +1,14 @@
+[rustc]
+path = "/usr/bin/rustc" # path to rustc
+args = [
+      "-o",
+      "out/rustc.out"
+    ]
+
+[gccrs]
+path = "/home/nobel/gccrs-install/bin/gccrs" # path to gccrs
+args = [
+      "-frust-incomplete-and-experimental-compiler-do-not-use",
+      "-o",
+      "out/gccrs.out"
+    ]

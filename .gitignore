@@ -1,1 +1,6 @@
 /target
+
+# compiler output
+*.out
+*.rox 
+

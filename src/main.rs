@@ -6,8 +6,8 @@ use crate::config::{AppConfig, ConfigError};
 use clap::Parser;
 use env_logger::Env;
 use log::{error, info};
-use std::fs::File;
-use std::path::PathBuf;
+use std::fs::read_dir;
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use thiserror::Error;
 
@@ -19,8 +19,17 @@ enum AppError {
     #[error(transparent)]
     Config(#[from] ConfigError),
 
-    #[error("Compilation error: {0}")]
-    Compilation(String),
+    #[error("Compilation error for {compiler}:\n {message}")]
+    Compilation { compiler: String, message: String },
+
+    #[error("I/O error for '{file}': {error}")]
+    Io {
+        file: PathBuf,
+        error: std::io::Error,
+    },
+
+    #[error("Unequal file count: rustc: {0} but gccrs: {1}")]
+    UnequalFileCount(usize, usize),
 }
 
 #[derive(Debug)]
@@ -60,36 +69,105 @@ fn main() -> ExitCode {
 }
 
 fn run_app() -> Result<(), AppError> {
+    let config = AppConfig::load("config/Compiler.toml")?;
+    info!("Config file read successful");
+
     let args = Cli::parse();
-
     match args.mode {
-        Mode::Test { filename } => {
-            if !filename.exists() {
-                let error_msg = format!("file '{}' does not exist", filename.display());
-                return Err(CliError::InvalidPath(error_msg).into());
-            }
-
-            // simple check to see if we can read the file
-            File::open(&filename).map_err(CliError::FileReadError)?;
-
-            let config = AppConfig::load("config/Compiler.toml")?;
-            info!("Config file read successful");
-
-            compile_with(
-                &config.gccrs.path,
-                &filename,
-                &config.gccrs.args,
-                Compiler::Gccrs,
-            )?;
-            compile_with(
-                &config.rustc.path,
-                &filename,
-                &config.rustc.args,
-                Compiler::Rustc,
-            )?;
-        }
+        Mode::File { rustc, gccrs } => process_file(&rustc, &gccrs, &config),
+        Mode::Dir { path } => process_directory(&path, &config),
     }
+}
+
+fn process_file(rustc: &PathBuf, gccrs: &PathBuf, config: &AppConfig) -> Result<(), AppError> {
+    if !rustc.exists() || !gccrs.exists() {
+        let error_msg = format!("file '{}' does not exist", rustc.display());
+        return Err(CliError::InvalidPath(error_msg).into());
+    }
+
+    compile_with(
+        &config.rustc.path,
+        rustc,
+        &config.rustc.args,
+        Compiler::Rustc,
+    )?;
+
+    compile_with(
+        &config.gccrs.path,
+        gccrs,
+        &config.gccrs.args,
+        Compiler::Gccrs,
+    )?;
     Ok(())
+}
+
+fn process_directory(path: &Path, config: &AppConfig) -> Result<(), AppError> {
+    info!("Running on '{}' directory", path.display());
+    if !path.exists() || !path.is_dir() {
+        let msg = format!("Directory '{}' does not exist", path.display());
+        return Err(CliError::InvalidPath(msg).into());
+    }
+
+    let rustc_dir = path.join("rustc");
+    let gccrs_dir = path.join("gccrs");
+
+    if !rustc_dir.exists() || !gccrs_dir.exists() {
+        let msg = format!(
+            "Required subdirectories 'rustc' and 'gccrs' not found in '{}'",
+            path.display()
+        );
+        error!("{}", msg);
+        return Err(CliError::InvalidPath(msg).into());
+    }
+
+    let gccrs_files = get_files_in_directory(&gccrs_dir)?;
+    let rustc_files = get_files_in_directory(&rustc_dir)?;
+    if gccrs_files.len() != rustc_files.len() {
+        return Err(AppError::UnequalFileCount(
+            rustc_files.len(),
+            gccrs_files.len(),
+        ));
+    }
+
+    info!("Validating {} rust files", rustc_files.len());
+    let file_count = rustc_files.len();
+    for index in 0..file_count {
+        compile_with(
+            &config.rustc.path,
+            &rustc_files[index],
+            &config.rustc.args,
+            Compiler::Rustc,
+        )?;
+        compile_with(
+            &config.gccrs.path,
+            &gccrs_files[index],
+            &config.gccrs.args,
+            Compiler::Gccrs,
+        )?;
+    }
+
+    Ok(())
+}
+
+fn get_files_in_directory(dir: &PathBuf) -> Result<Vec<PathBuf>, AppError> {
+    info!("Reading files from directory: {}", dir.display());
+    let files = read_dir(dir)
+        .map_err(|e| AppError::Io {
+            file: dir.clone(),
+            error: e,
+        })?
+        .filter_map(|entry| {
+            entry.ok().and_then(|e| {
+                let path = e.path();
+                if path.is_file() {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    Ok(files)
 }
 
 fn compile_with(
@@ -103,22 +181,21 @@ fn compile_with(
         src_file_path.display(),
         compiler_type.name()
     );
-    let status = Command::new(compiler)
+
+    let output = Command::new(compiler)
         .arg(src_file_path)
         .args(args)
-        .status()
-        .map_err(|e| {
-            AppError::Compilation(format!("Failed to execute {}: {}", compiler_type.name(), e))
+        .output()
+        .map_err(|e| AppError::Io {
+            file: src_file_path.clone(),
+            error: e,
         })?;
 
-    if !status.success() {
-        let err = format!(
-            "{} compilation failed with {}",
-            compiler_type.name(),
-            status
-        );
-        return Err(AppError::Compilation(err));
+    if !output.status.success() {
+        return Err(AppError::Compilation {
+            compiler: compiler_type.name().to_string(),
+            message: String::from_utf8_lossy(&output.stderr).to_string(),
+        });
     }
-    info!("{} compilation successful", compiler_type.name());
     Ok(())
 }

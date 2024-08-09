@@ -17,18 +17,12 @@ pub enum ConfigError {
 
 #[derive(Deserialize, Debug)]
 pub struct AppConfig {
-    pub rustc: RustcConfig,
-    pub gccrs: GccrsConfig,
+    pub rustc: CompilerConfig,
+    pub gccrs: CompilerConfig,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct RustcConfig {
-    pub path: PathBuf,
-    pub args: Vec<String>,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct GccrsConfig {
+pub struct CompilerConfig {
     pub path: PathBuf,
     pub args: Vec<String>,
 }
@@ -58,4 +52,3 @@ impl AppConfig {
         Ok(())
     }
 }
-

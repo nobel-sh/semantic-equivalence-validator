@@ -1,15 +1,5 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum CliError {
-    #[error("Read error: {0}")]
-    FileReadError(#[from] std::io::Error),
-
-    #[error("Invalid path: {0}")]
-    InvalidPath(String),
-}
 
 #[derive(Parser)]
 #[command(about = "Semantic equivalence validation tool for gccrs")]

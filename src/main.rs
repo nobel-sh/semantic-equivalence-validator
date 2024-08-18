@@ -1,41 +1,38 @@
+mod analysis;
 mod cli;
+mod compiler;
 mod config;
+mod reporting;
+mod testsuite;
+mod utils;
 
-use crate::cli::{Cli, CliError, Mode};
+use crate::cli::{Cli, Mode};
+use crate::compiler::{compile_with, CompilerKind};
 use crate::config::{AppConfig, ConfigError};
+use crate::testsuite::{TestSuite, TestSuiteError};
 use clap::Parser;
 use env_logger::Env;
 use log::{error, info};
-use std::fs::File;
-use std::path::PathBuf;
-use std::process::{Command, ExitCode};
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 enum AppError {
     #[error(transparent)]
-    Cli(#[from] CliError),
-
-    #[error(transparent)]
     Config(#[from] ConfigError),
 
-    #[error("Compilation error: {0}")]
-    Compilation(String),
-}
+    #[error(transparent)]
+    TestSuite(#[from] TestSuiteError),
 
-#[derive(Debug)]
-enum Compiler {
-    Rustc,
-    Gccrs,
-}
+    #[error("Compilation error for {compiler}:\n {message}")]
+    Compilation { compiler: String, message: String },
 
-impl Compiler {
-    fn name(&self) -> &'static str {
-        match self {
-            Compiler::Rustc => "rustc",
-            Compiler::Gccrs => "gccrs",
-        }
-    }
+    #[error("I/O error for '{file}': {error}")]
+    Io {
+        file: PathBuf,
+        error: std::io::Error,
+    },
 }
 
 fn init_logger() {
@@ -60,65 +57,51 @@ fn main() -> ExitCode {
 }
 
 fn run_app() -> Result<(), AppError> {
+    let config = AppConfig::load("config/Compiler.toml")?;
+    info!("Config file read successful");
+
     let args = Cli::parse();
-
     match args.mode {
-        Mode::Test { filename } => {
-            if !filename.exists() {
-                let error_msg = format!("file '{}' does not exist", filename.display());
-                return Err(CliError::InvalidPath(error_msg).into());
-            }
-
-            // simple check to see if we can read the file
-            File::open(&filename).map_err(CliError::FileReadError)?;
-
-            let config = AppConfig::load("config/Compiler.toml")?;
-            info!("Config file read successful");
-
-            compile_with(
-                &config.gccrs.path,
-                &filename,
-                &config.gccrs.args,
-                Compiler::Gccrs,
-            )?;
-            compile_with(
-                &config.rustc.path,
-                &filename,
-                &config.rustc.args,
-                Compiler::Rustc,
-            )?;
-        }
+        Mode::File { rustc, gccrs } => run_file(&rustc, &gccrs, &config),
+        Mode::Dir { path } => run_directory(&path, &config),
     }
+}
+
+fn run_file(rustc: &Path, gccrs: &Path, config: &AppConfig) -> Result<(), AppError> {
+    let testsuite = TestSuite::from_file(rustc, gccrs)?;
+    compile_with(
+        &config.rustc.path,
+        &testsuite.cases[0].rustc,
+        &config.rustc.args,
+        CompilerKind::Rustc,
+    )?;
+
+    compile_with(
+        &config.gccrs.path,
+        &testsuite.cases[0].gccrs,
+        &config.gccrs.args,
+        CompilerKind::Gccrs,
+    )?;
     Ok(())
 }
 
-fn compile_with(
-    compiler: &PathBuf,
-    src_file_path: &PathBuf,
-    args: &[String],
-    compiler_type: Compiler,
-) -> Result<(), AppError> {
-    info!(
-        "Compiling '{}' with {}",
-        src_file_path.display(),
-        compiler_type.name()
-    );
-    let status = Command::new(compiler)
-        .arg(src_file_path)
-        .args(args)
-        .status()
-        .map_err(|e| {
-            AppError::Compilation(format!("Failed to execute {}: {}", compiler_type.name(), e))
-        })?;
-
-    if !status.success() {
-        let err = format!(
-            "{} compilation failed with {}",
-            compiler_type.name(),
-            status
-        );
-        return Err(AppError::Compilation(err));
+fn run_directory(path: &Path, config: &AppConfig) -> Result<(), AppError> {
+    info!("Running on '{}' directory", path.display());
+    let testsuite = TestSuite::from_dir(path)?;
+    info!("Validating {} rust files", testsuite.size);
+    for case in testsuite.cases {
+        compile_with(
+            &config.rustc.path,
+            &case.rustc,
+            &config.rustc.args,
+            CompilerKind::Rustc,
+        )?;
+        compile_with(
+            &config.gccrs.path,
+            &case.gccrs,
+            &config.gccrs.args,
+            CompilerKind::Gccrs,
+        )?;
     }
-    info!("{} compilation successful", compiler_type.name());
     Ok(())
 }

@@ -31,13 +31,11 @@ impl AnalysisContext {
     }
 
     pub fn analyze(&self) -> Result<(), AnalysisError> {
-        info!("Starting analysis...");
         let gccrs_exec_result = self.gccrs.run_binary()?;
         let rustc_exec_result = self.rustc.run_binary()?;
         let compare = Comparison::new(gccrs_exec_result, rustc_exec_result);
         let result = compare.compare();
         if result.is_identical() {
-            info!("Analysis complete. Results are equivalent.");
             Ok(())
         } else {
             Err(AnalysisError::ComparisonFailed(result))

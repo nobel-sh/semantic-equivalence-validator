@@ -47,11 +47,12 @@ enum AppError {
 fn init_logger() {
     let env = Env::default()
         .filter_or("RUST_LOG", "info") // default log level is set to info
-        .write_style_or("RUST_LOG_STYLE", "always");
+        .write_style_or("RUST_LOG_STYLE", "auto");
 
     env_logger::Builder::from_env(env)
         .format_level(true)
         .format_timestamp(None)
+        .format_target(false)
         .init()
 }
 
@@ -78,6 +79,10 @@ fn run_app() -> Result<(), AppError> {
 
 fn run_file(rustc: &Path, gccrs: &Path, config: &AppConfig) -> Result<(), AppError> {
     let testsuite = TestSuite::from_file(rustc, gccrs)?;
+    let gccrs_binary = Path::new(GCCRS_OUTPUT_BIN);
+    let rustc_binary = Path::new(RUSTC_OUTPUT_BIN);
+    let timeout = Duration::from_secs(ANALYSIS_TIMEOUT);
+
     compile_with(
         &config.rustc.path,
         &testsuite.cases[0].rustc,
@@ -91,18 +96,21 @@ fn run_file(rustc: &Path, gccrs: &Path, config: &AppConfig) -> Result<(), AppErr
         &config.gccrs.args,
         CompilerKind::Gccrs,
     )?;
-    let gccrs_binary = Path::new(GCCRS_OUTPUT_BIN);
-    let rustc_binary = Path::new(RUSTC_OUTPUT_BIN);
-    let timeout = Duration::from_secs(ANALYSIS_TIMEOUT);
+    info!("Starting analysis...");
     let context = AnalysisContext::new(gccrs_binary, rustc_binary, timeout);
     context.analyze()?;
+    info!("Analysis complete. Results are equivalent.");
     Ok(())
 }
 
 fn run_directory(path: &Path, config: &AppConfig) -> Result<(), AppError> {
     info!("Running on '{}' directory", path.display());
     let testsuite = TestSuite::from_dir(path)?;
-    info!("Validating {} rust files", testsuite.size);
+    info!("Validating [{}] rust files", testsuite.size);
+    let gccrs_binary = Path::new(GCCRS_OUTPUT_BIN);
+    let rustc_binary = Path::new(RUSTC_OUTPUT_BIN);
+    let timeout = Duration::from_secs(ANALYSIS_TIMEOUT);
+
     for case in testsuite.cases {
         compile_with(
             &config.rustc.path,
@@ -116,6 +124,10 @@ fn run_directory(path: &Path, config: &AppConfig) -> Result<(), AppError> {
             &config.gccrs.args,
             CompilerKind::Gccrs,
         )?;
+        info!("Starting analysis...");
+        let context = AnalysisContext::new(gccrs_binary, rustc_binary, timeout);
+        context.analyze()?;
+        info!("Results are equivalent.");
     }
     Ok(())
 }

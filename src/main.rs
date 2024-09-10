@@ -21,7 +21,7 @@ use thiserror::Error;
 
 const GCCRS_OUTPUT_BIN: &str = "out/gccrs.out";
 const RUSTC_OUTPUT_BIN: &str = "out/rustc.out";
-const ANALYSIS_TIMEOUT: u64 = 10; // in secs
+const ANALYSIS_TIMEOUT: u64 = 5; // in secs
 
 #[derive(Debug, Error)]
 enum AppError {

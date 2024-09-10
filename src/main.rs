@@ -6,6 +6,7 @@ mod reporting;
 mod testsuite;
 mod utils;
 
+use crate::analysis::{AnalysisContext, AnalysisError};
 use crate::cli::{Cli, Mode};
 use crate::compiler::{compile_with, CompilerKind};
 use crate::config::{AppConfig, ConfigError};
@@ -15,7 +16,12 @@ use env_logger::Env;
 use log::{error, info};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::Duration;
 use thiserror::Error;
+
+const GCCRS_OUTPUT_BIN: &str = "out/gccrs.out";
+const RUSTC_OUTPUT_BIN: &str = "out/rustc.out";
+const ANALYSIS_TIMEOUT: u64 = 10; // in secs
 
 #[derive(Debug, Error)]
 enum AppError {
@@ -24,6 +30,9 @@ enum AppError {
 
     #[error(transparent)]
     TestSuite(#[from] TestSuiteError),
+
+    #[error(transparent)]
+    Analysis(#[from] AnalysisError),
 
     #[error("Compilation error for {compiler}:\n {message}")]
     Compilation { compiler: String, message: String },
@@ -82,6 +91,11 @@ fn run_file(rustc: &Path, gccrs: &Path, config: &AppConfig) -> Result<(), AppErr
         &config.gccrs.args,
         CompilerKind::Gccrs,
     )?;
+    let gccrs_binary = Path::new(GCCRS_OUTPUT_BIN);
+    let rustc_binary = Path::new(RUSTC_OUTPUT_BIN);
+    let timeout = Duration::from_secs(ANALYSIS_TIMEOUT);
+    let context = AnalysisContext::new(gccrs_binary, rustc_binary, timeout);
+    context.analyze()?;
     Ok(())
 }
 

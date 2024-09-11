@@ -10,7 +10,7 @@ use crate::analysis::{AnalysisContext, AnalysisError};
 use crate::cli::{Cli, Mode};
 use crate::compiler::{compile_with, CompilerKind};
 use crate::config::{AppConfig, ConfigError};
-use crate::testsuite::{TestSuite, TestSuiteError};
+use crate::testsuite::{TestCase, TestSuite, TestSuiteError};
 use clap::Parser;
 use env_logger::Env;
 use log::{error, info};
@@ -19,8 +19,6 @@ use std::process::ExitCode;
 use std::time::Duration;
 use thiserror::Error;
 
-const GCCRS_OUTPUT_BIN: &str = "out/gccrs.out";
-const RUSTC_OUTPUT_BIN: &str = "out/rustc.out";
 const ANALYSIS_TIMEOUT: u64 = 5; // in secs
 
 #[derive(Debug, Error)]
@@ -42,6 +40,9 @@ enum AppError {
         file: PathBuf,
         error: std::io::Error,
     },
+
+    #[error("{1} difference found.")]
+    MultipleErrors(Vec<AppError>, usize),
 }
 
 fn init_logger() {
@@ -79,55 +80,85 @@ fn run_app() -> Result<(), AppError> {
 
 fn run_file(rustc: &Path, gccrs: &Path, config: &AppConfig) -> Result<(), AppError> {
     let testsuite = TestSuite::from_file(rustc, gccrs)?;
-    let gccrs_binary = Path::new(GCCRS_OUTPUT_BIN);
-    let rustc_binary = Path::new(RUSTC_OUTPUT_BIN);
+    let gccrs_binary = Path::new("out/gccrs.out");
+    let rustc_binary = Path::new("out/rustc.out");
     let timeout = Duration::from_secs(ANALYSIS_TIMEOUT);
 
-    compile_with(
-        &config.rustc.path,
-        &testsuite.cases[0].rustc,
-        &config.rustc.args,
-        CompilerKind::Rustc,
-    )?;
-
-    compile_with(
-        &config.gccrs.path,
-        &testsuite.cases[0].gccrs,
-        &config.gccrs.args,
-        CompilerKind::Gccrs,
-    )?;
-    info!("Starting analysis...");
-    let context = AnalysisContext::new(gccrs_binary, rustc_binary, timeout);
-    context.analyze()?;
-    info!("Analysis complete. Results are equivalent.");
-    Ok(())
+    compile_and_analyze_case(
+        &testsuite.cases[0],
+        config,
+        gccrs_binary,
+        rustc_binary,
+        timeout,
+    )
 }
 
 fn run_directory(path: &Path, config: &AppConfig) -> Result<(), AppError> {
     info!("Running on '{}' directory", path.display());
     let testsuite = TestSuite::from_dir(path)?;
-    info!("Validating [{}] rust files", testsuite.size);
-    let gccrs_binary = Path::new(GCCRS_OUTPUT_BIN);
-    let rustc_binary = Path::new(RUSTC_OUTPUT_BIN);
-    let timeout = Duration::from_secs(ANALYSIS_TIMEOUT);
+    info!("Validating [{}] test cases", testsuite.size);
 
-    for case in testsuite.cases {
-        compile_with(
-            &config.rustc.path,
-            &case.rustc,
-            &config.rustc.args,
-            CompilerKind::Rustc,
-        )?;
-        compile_with(
-            &config.gccrs.path,
-            &case.gccrs,
-            &config.gccrs.args,
-            CompilerKind::Gccrs,
-        )?;
-        info!("Starting analysis...");
-        let context = AnalysisContext::new(gccrs_binary, rustc_binary, timeout);
-        context.analyze()?;
-        info!("Results are equivalent.");
+    let timeout = Duration::from_secs(ANALYSIS_TIMEOUT);
+    let gccrs_binary = Path::new("out/gccrs.out");
+    let rustc_binary = Path::new("out/rustc.out");
+
+    let errors: Vec<_> = testsuite
+        .cases
+        .iter()
+        .filter_map(|case| {
+            compile_and_analyze_case(case, config, gccrs_binary, rustc_binary, timeout).err()
+        })
+        .collect();
+
+    if !errors.is_empty() {
+        let mut count = 0;
+        for error in &errors {
+            error!("{}", error);
+            count += 1;
+        }
+        return Err(AppError::MultipleErrors(errors, count));
+    } else {
+        Ok(())
     }
+}
+
+fn compile_and_analyze_case(
+    case: &TestCase,
+    config: &AppConfig,
+    gccrs_binary: &Path,
+    rustc_binary: &Path,
+    timeout: Duration,
+) -> Result<(), AppError> {
+    compile_with_compiler(
+        &config.rustc.path,
+        &case.rustc,
+        &config.rustc.args,
+        CompilerKind::Rustc,
+    )?;
+    compile_with_compiler(
+        &config.gccrs.path,
+        &case.gccrs,
+        &config.gccrs.args,
+        CompilerKind::Gccrs,
+    )?;
+
+    info!("Starting analysis for case '{}' ...", case.name);
+    let context = AnalysisContext::new(case.name.clone(), gccrs_binary, rustc_binary, timeout);
+
+    context.analyze().map_err(AppError::Analysis)?;
+
+    info!("Results are equivalent for case '{}'.", case.name);
     Ok(())
+}
+
+fn compile_with_compiler(
+    compiler_path: &Path,
+    input_file: &Path,
+    args: &[String],
+    kind: CompilerKind,
+) -> Result<(), AppError> {
+    compile_with(compiler_path, input_file, args, kind.clone()).map_err(|e| AppError::Compilation {
+        compiler: kind.to_string(),
+        message: e.to_string(),
+    })
 }

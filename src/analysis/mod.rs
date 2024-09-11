@@ -9,6 +9,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 pub struct AnalysisContext {
+    pub testname: String,
     pub gccrs: ExecutionContext,
     pub rustc: ExecutionContext,
 }
@@ -18,13 +19,19 @@ pub enum AnalysisError {
     #[error(transparent)]
     Execution(#[from] ExecutionError),
 
-    #[error("Comparison failed: {0}")]
-    ComparisonFailed(ComparisonResult),
+    #[error("Comparison failed for case '{1}': {0}")]
+    ComparisonFailed(ComparisonResult, String),
 }
 
 impl AnalysisContext {
-    pub fn new(gccrs_binary: &Path, rustc_binary: &Path, timeout: Duration) -> Self {
+    pub fn new(
+        testname: String,
+        gccrs_binary: &Path,
+        rustc_binary: &Path,
+        timeout: Duration,
+    ) -> Self {
         Self {
+            testname,
             gccrs: ExecutionContext::new(gccrs_binary, timeout),
             rustc: ExecutionContext::new(rustc_binary, timeout),
         }
@@ -38,7 +45,10 @@ impl AnalysisContext {
         if result.is_identical() {
             Ok(())
         } else {
-            Err(AnalysisError::ComparisonFailed(result))
+            Err(AnalysisError::ComparisonFailed(
+                result,
+                self.testname.clone(),
+            ))
         }
     }
 }

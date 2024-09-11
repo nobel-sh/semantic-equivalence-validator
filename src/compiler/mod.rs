@@ -1,10 +1,10 @@
 use crate::AppError;
 use log::info;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CompilerKind {
     Rustc,
     Gccrs,
@@ -30,9 +30,18 @@ impl CompilerKind {
     }
 }
 
+impl std::fmt::Display for CompilerKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CompilerKind::Rustc => write!(f, "rustc"),
+            CompilerKind::Gccrs => write!(f, "gccrs"),
+        }
+    }
+}
+
 pub fn compile_with(
-    compiler: &PathBuf,
-    src_file_path: &PathBuf,
+    compiler: &Path,
+    src_file_path: &Path,
     args: &[String],
     compiler_type: CompilerKind,
 ) -> Result<(), AppError> {
@@ -47,7 +56,7 @@ pub fn compile_with(
         .args(args)
         .output()
         .map_err(|e| AppError::Io {
-            file: src_file_path.clone(),
+            file: src_file_path.to_path_buf(),
             error: e,
         })?;
 

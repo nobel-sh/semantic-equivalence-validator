@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 use thiserror::Error;
+use wait_timeout::ChildExt;
 
 pub struct ExecutionContext {
     pub binary: PathBuf,
@@ -36,27 +36,38 @@ impl ExecutionContext {
     }
 
     pub fn run_binary(&self) -> Result<ExecutionResult, ExecutionError> {
-        let (sender, receiver) = mpsc::channel();
         let binary = self.binary.clone();
         let timeout = self.timeout;
 
-        thread::spawn(move || {
-            let output = Command::new(binary)
-                .output()
-                .map_err(|e| ExecutionError::Failed(e.to_string()));
-            sender.send(output).unwrap();
-        });
+        let mut child = Command::new(binary)
+            .spawn()
+            .map_err(|e| ExecutionError::Failed(e.to_string()))?;
 
-        match receiver.recv_timeout(timeout) {
-            Ok(Ok(output)) => Ok(ExecutionResult {
-                output: Some(output),
-                timed_out: false,
-            }),
-            Ok(Err(e)) => Err(e),
-            Err(_) => Ok(ExecutionResult {
-                output: None,
-                timed_out: true,
-            }),
+        match child
+            .wait_timeout(timeout)
+            .map_err(|e| ExecutionError::Failed(e.to_string()))?
+        {
+            Some(_) => {
+                let output = child
+                    .wait_with_output()
+                    .map_err(|e| ExecutionError::Failed(e.to_string()))?;
+
+                Ok(ExecutionResult {
+                    output: Some(output),
+                    timed_out: false,
+                })
+            }
+            None => {
+                child
+                    .kill()
+                    .map_err(|e| ExecutionError::Failed(e.to_string()))?;
+                child.wait().ok();
+
+                Ok(ExecutionResult {
+                    output: None,
+                    timed_out: true,
+                })
+            }
         }
     }
 }

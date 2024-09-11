@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
-use std::thread;
 use std::time::Duration;
 use thiserror::Error;
 use wait_timeout::ChildExt;

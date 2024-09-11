@@ -1,94 +1,93 @@
 use super::executor::ExecutionResult;
+use std::fmt;
+
+#[derive(Debug, PartialEq)]
+pub enum Difference {
+    ExitCode(String, String),
+    Stdout(String, String),
+    Stderr(String, String),
+    Timeout(bool, bool),
+}
 
 #[derive(Debug, PartialEq)]
 pub struct ComparisonResult {
-    pub exit_code_differ: Option<(String, String)>,
-    pub stdout_differ: Option<Box<(String, String)>>,
-    pub stderr_differ: Option<Box<(String, String)>>,
-    pub timeout_differ: Option<(bool, bool)>,
+    pub differences: Vec<Difference>,
 }
 
 impl ComparisonResult {
     pub fn is_identical(&self) -> bool {
-        self.exit_code_differ.is_none()
-            && self.stdout_differ.is_none()
-            && self.stderr_differ.is_none()
-            && self.timeout_differ.is_none()
+        self.differences.is_empty()
     }
+
     pub fn has_diff(&self) -> bool {
-        self.exit_code_differ.is_some()
-            || self.stdout_differ.is_some()
-            || self.stderr_differ.is_some()
-            || self.timeout_differ.is_some()
+        !self.is_identical()
     }
 }
 
-impl std::fmt::Display for ComparisonResult {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ComparisonResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.has_diff() {
-            if let Some((gccrs_timed_out, rustc_timed_out)) = self.timeout_differ {
-                writeln!(
-                    f,
-                    "\n=== Timeout Difference ===\n\
-                     gccrs timed out: {}\n\
-                     rustc timed out: {}\n",
-                    gccrs_timed_out, rustc_timed_out
-                )?;
-            }
-
-            if let Some((gccrs_exit, rustc_exit)) = &self.exit_code_differ {
-                writeln!(
-                    f,
-                    "\n=== Exit Code Difference ===\n\
-                     gccrs: {}\n\
-                     rustc: {}\n",
-                    gccrs_exit, rustc_exit
-                )?;
-            }
-
-            if let Some(boxed_stdout) = &self.stdout_differ {
-                let (gccrs_stdout, rustc_stdout) = &**boxed_stdout;
-                writeln!(
-                    f,
-                    "=== Stdout Difference ===\n\
-                     gccrs:\n  {}\n\
-                     rustc:\n  {}\n",
-                    if gccrs_stdout.is_empty() {
-                        "(empty)"
-                    } else {
-                        gccrs_stdout
-                    },
-                    if rustc_stdout.is_empty() {
-                        "(empty)"
-                    } else {
-                        rustc_stdout
-                    },
-                )?;
-            }
-
-            if let Some(boxed_stderr) = &self.stderr_differ {
-                let (gccrs_stderr, rustc_stderr) = &**boxed_stderr;
-                writeln!(
-                    f,
-                    "=== Stderr Difference ===\n\
-                     gccrs:\n  {}\n\
-                     rustc:\n  {}\n",
-                    if gccrs_stderr.is_empty() {
-                        "(empty)"
-                    } else {
-                        gccrs_stderr
-                    },
-                    if rustc_stderr.is_empty() {
-                        "(empty)"
-                    } else {
-                        rustc_stderr
-                    },
-                )?;
+            for diff in &self.differences {
+                match diff {
+                    Difference::Timeout(gccrs_timed_out, rustc_timed_out) => {
+                        writeln!(
+                            f,
+                            "\n=== Timeout Difference ===\n\
+                             gccrs timed out: {}\n\
+                             rustc timed out: {}\n",
+                            gccrs_timed_out, rustc_timed_out
+                        )?;
+                    }
+                    Difference::ExitCode(gccrs_exit, rustc_exit) => {
+                        writeln!(
+                            f,
+                            "\n=== Exit Code Difference ===\n\
+                             gccrs: {}\n\
+                             rustc: {}\n",
+                            gccrs_exit, rustc_exit
+                        )?;
+                    }
+                    Difference::Stdout(gccrs_stdout, rustc_stdout) => {
+                        writeln!(
+                            f,
+                            "\n=== Stdout Difference ===\n\
+                             gccrs:\n  {}\n\
+                             rustc:\n  {}\n",
+                            if gccrs_stdout.is_empty() {
+                                "(empty)"
+                            } else {
+                                gccrs_stdout
+                            },
+                            if rustc_stdout.is_empty() {
+                                "(empty)"
+                            } else {
+                                rustc_stdout
+                            }
+                        )?;
+                    }
+                    Difference::Stderr(gccrs_stderr, rustc_stderr) => {
+                        writeln!(
+                            f,
+                            "\n=== Stderr Difference ===\n\
+                             gccrs:\n  {}\n\
+                             rustc:\n  {}\n",
+                            if gccrs_stderr.is_empty() {
+                                "(empty)"
+                            } else {
+                                gccrs_stderr
+                            },
+                            if rustc_stderr.is_empty() {
+                                "(empty)"
+                            } else {
+                                rustc_stderr
+                            }
+                        )?;
+                    }
+                }
             }
         } else {
             writeln!(f, "No differences found. The results are identical.")?;
         }
-
         Ok(())
     }
 }
@@ -104,37 +103,32 @@ impl Comparison {
     }
 
     pub fn compare(&self) -> ComparisonResult {
-        let timeout_differ = self.compare_timeouts();
-        if timeout_differ.is_some() {
-            return ComparisonResult {
-                exit_code_differ: None,
-                stdout_differ: None,
-                stderr_differ: None,
-                timeout_differ,
-            };
-        }
-        let exit_code_differ = self.compare_exit_code();
-        let stdout_differ = self
-            .compare_output(
-                "stdout",
-                &self.gccrs.output.as_ref().map(|o| &o.stdout),
-                &self.rustc.output.as_ref().map(|o| &o.stdout),
-            )
-            .map(Box::new);
-        let stderr_differ = self
-            .compare_output(
-                "stderr",
-                &self.gccrs.output.as_ref().map(|o| &o.stderr),
-                &self.rustc.output.as_ref().map(|o| &o.stderr),
-            )
-            .map(Box::new);
+        let mut differences = Vec::new();
 
-        ComparisonResult {
-            exit_code_differ,
-            stdout_differ,
-            stderr_differ,
-            timeout_differ,
+        if let Some(timeout_diff) = self.compare_timeouts() {
+            differences.push(Difference::Timeout(timeout_diff.0, timeout_diff.1));
+            return ComparisonResult { differences }; // Skip other section if we timeout
         }
+
+        if let Some(exit_code_diff) = self.compare_exit_code() {
+            differences.push(Difference::ExitCode(exit_code_diff.0, exit_code_diff.1));
+        }
+
+        if let Some(stdout_diff) = self.compare_output(
+            &self.gccrs.output.as_ref().and_then(|o| Some(&o.stdout)),
+            &self.rustc.output.as_ref().and_then(|o| Some(&o.stdout)),
+        ) {
+            differences.push(Difference::Stdout(stdout_diff.0, stdout_diff.1));
+        }
+
+        if let Some(stderr_diff) = self.compare_output(
+            &self.gccrs.output.as_ref().and_then(|o| Some(&o.stderr)),
+            &self.rustc.output.as_ref().and_then(|o| Some(&o.stderr)),
+        ) {
+            differences.push(Difference::Stderr(stderr_diff.0, stderr_diff.1));
+        }
+
+        ComparisonResult { differences }
     }
 
     fn compare_timeouts(&self) -> Option<(bool, bool)> {
@@ -145,45 +139,42 @@ impl Comparison {
         }
     }
 
-    fn compare_exit_code(&self) -> Option<(String, String)> {
-        let format_exit_code = |code: Option<i32>| {
-            code.map_or_else(|| "Terminated by signal".to_string(), |c| c.to_string())
-        };
+    fn format_exit_code(code: Option<i32>) -> String {
+        code.map_or_else(|| "Terminated by signal".to_string(), |c| c.to_string())
+    }
 
-        // Check if both outputs are present
+    fn compare_exit_code(&self) -> Option<(String, String)> {
         let gccrs_exit_code = self.gccrs.output.as_ref().and_then(|o| o.status.code());
         let rustc_exit_code = self.rustc.output.as_ref().and_then(|o| o.status.code());
 
         if gccrs_exit_code != rustc_exit_code {
-            let gccrs_exit = format_exit_code(gccrs_exit_code);
-            let rustc_exit = format_exit_code(rustc_exit_code);
-            Some((gccrs_exit, rustc_exit))
+            Some((
+                Self::format_exit_code(gccrs_exit_code),
+                Self::format_exit_code(rustc_exit_code),
+            ))
         } else {
             None
         }
     }
 
+    fn format_output(opt_output: &Option<&Vec<u8>>) -> String {
+        opt_output
+            .map(|output| String::from_utf8_lossy(output).into_owned())
+            .unwrap_or_else(|| "No output (timed out)".to_string())
+    }
+
     fn compare_output(
         &self,
-        _name: &str,
         gccrs: &Option<&Vec<u8>>,
         rustc: &Option<&Vec<u8>>,
     ) -> Option<(String, String)> {
-        match (gccrs, rustc) {
-            (Some(g), Some(r)) if g != r => {
-                let gccrs_str = String::from_utf8_lossy(g).into_owned();
-                let rustc_str = String::from_utf8_lossy(r).into_owned();
-                Some((gccrs_str, rustc_str))
-            }
-            (Some(g), None) => Some((
-                String::from_utf8_lossy(g).into_owned(),
-                "No output (timed out)".to_string(),
-            )),
-            (None, Some(r)) => Some((
-                "No output (timed out)".to_string(),
-                String::from_utf8_lossy(r).into_owned(),
-            )),
-            _ => None,
+        let gccrs_output = Self::format_output(gccrs);
+        let rustc_output = Self::format_output(rustc);
+
+        if gccrs_output != rustc_output {
+            Some((gccrs_output, rustc_output))
+        } else {
+            None
         }
     }
 }

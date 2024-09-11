@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::thread;
 use std::time::Duration;
 use thiserror::Error;
@@ -40,6 +40,8 @@ impl ExecutionContext {
         let timeout = self.timeout;
 
         let mut child = Command::new(binary)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| ExecutionError::Failed(e.to_string()))?;
 

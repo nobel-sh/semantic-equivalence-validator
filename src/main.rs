@@ -10,6 +10,7 @@ use crate::analysis::{AnalysisContext, AnalysisError};
 use crate::cli::{Cli, Mode};
 use crate::compiler::{compile_with, CompilerKind};
 use crate::config::{AppConfig, ConfigError};
+use crate::reporting::{ErrorReporter, Report};
 use crate::testsuite::{TestCase, TestSuite, TestSuiteError};
 use clap::Parser;
 use env_logger::Env;
@@ -17,6 +18,7 @@ use log::{error, info};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
+use std::time::Instant;
 use thiserror::Error;
 
 const ANALYSIS_TIMEOUT: u64 = 5; // in secs
@@ -41,8 +43,8 @@ enum AppError {
         error: std::io::Error,
     },
 
-    #[error("{1} difference found.")]
-    MultipleErrors(Vec<AppError>, usize),
+    #[error("Difference(s) found: {0}")]
+    DifferenceFound(usize),
 }
 
 fn init_logger() {
@@ -69,7 +71,7 @@ fn main() -> ExitCode {
 
 fn run_app() -> Result<(), AppError> {
     let config = AppConfig::load("config/Compiler.toml")?;
-    info!("Config file read successful");
+    info!("Config file read successfully");
 
     let args = Cli::parse();
     match args.mode {
@@ -84,13 +86,18 @@ fn run_file(rustc: &Path, gccrs: &Path, config: &AppConfig) -> Result<(), AppErr
     let rustc_binary = Path::new("out/rustc.out");
     let timeout = Duration::from_secs(ANALYSIS_TIMEOUT);
 
+    let mut report = Report::new();
     compile_and_analyze_case(
         &testsuite.cases[0],
         config,
         gccrs_binary,
         rustc_binary,
         timeout,
-    )
+        &mut report,
+    );
+
+    report.print_summary();
+    Ok(())
 }
 
 fn run_directory(path: &Path, config: &AppConfig) -> Result<(), AppError> {
@@ -102,21 +109,23 @@ fn run_directory(path: &Path, config: &AppConfig) -> Result<(), AppError> {
     let gccrs_binary = Path::new("out/gccrs.out");
     let rustc_binary = Path::new("out/rustc.out");
 
-    let errors: Vec<_> = testsuite
-        .cases
-        .iter()
-        .filter_map(|case| {
-            compile_and_analyze_case(case, config, gccrs_binary, rustc_binary, timeout).err()
-        })
-        .collect();
+    let mut report = Report::new();
 
-    if !errors.is_empty() {
-        let mut count = 0;
-        for error in &errors {
-            error!("{}", error);
-            count += 1;
-        }
-        return Err(AppError::MultipleErrors(errors, count));
+    for case in &testsuite.cases {
+        compile_and_analyze_case(
+            case,
+            config,
+            gccrs_binary,
+            rustc_binary,
+            timeout,
+            &mut report,
+        );
+    }
+
+    report.print_summary();
+
+    if report.failed_tests > 0 {
+        Err(AppError::DifferenceFound(report.failed_tests))
     } else {
         Ok(())
     }
@@ -128,27 +137,40 @@ fn compile_and_analyze_case(
     gccrs_binary: &Path,
     rustc_binary: &Path,
     timeout: Duration,
-) -> Result<(), AppError> {
-    compile_with_compiler(
+    report: &mut Report,
+) {
+    if let Err(e) = compile_with_compiler(
         &config.rustc.path,
         &case.rustc,
         &config.rustc.args,
         CompilerKind::Rustc,
-    )?;
-    compile_with_compiler(
+    ) {
+        report.add_error(ErrorReporter::Compilation {
+            message: e.to_string(),
+        });
+        return;
+    }
+
+    if let Err(e) = compile_with_compiler(
         &config.gccrs.path,
         &case.gccrs,
         &config.gccrs.args,
         CompilerKind::Gccrs,
-    )?;
+    ) {
+        report.add_error(ErrorReporter::Compilation {
+            message: e.to_string(),
+        });
+        return;
+    }
 
     info!("Starting analysis for case '{}' ...", case.name);
     let context = AnalysisContext::new(case.name.clone(), gccrs_binary, rustc_binary, timeout);
 
-    context.analyze().map_err(AppError::Analysis)?;
+    let start = Instant::now();
+    let result = context.analyze();
+    let duration = start.elapsed();
 
-    info!("Results are equivalent for case '{}'.", case.name);
-    Ok(())
+    report.add_result(case.name.clone(), result, duration);
 }
 
 fn compile_with_compiler(
@@ -156,9 +178,6 @@ fn compile_with_compiler(
     input_file: &Path,
     args: &[String],
     kind: CompilerKind,
-) -> Result<(), AppError> {
-    compile_with(compiler_path, input_file, args, kind.clone()).map_err(|e| AppError::Compilation {
-        compiler: kind.to_string(),
-        message: e.to_string(),
-    })
+) -> Result<(), String> {
+    compile_with(compiler_path, input_file, args, kind.clone()).map_err(|e| e.to_string())
 }

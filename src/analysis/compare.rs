@@ -115,15 +115,15 @@ impl Comparison {
         }
 
         if let Some(stdout_diff) = self.compare_output(
-            &self.gccrs.output.as_ref().and_then(|o| Some(&o.stdout)),
-            &self.rustc.output.as_ref().and_then(|o| Some(&o.stdout)),
+            &self.gccrs.output.as_ref().map(|o| (&o.stdout)),
+            &self.rustc.output.as_ref().map(|o| (&o.stdout)),
         ) {
             differences.push(Difference::Stdout(stdout_diff.0, stdout_diff.1));
         }
 
         if let Some(stderr_diff) = self.compare_output(
-            &self.gccrs.output.as_ref().and_then(|o| Some(&o.stderr)),
-            &self.rustc.output.as_ref().and_then(|o| Some(&o.stderr)),
+            &self.gccrs.output.as_ref().map(|o| (&o.stderr)),
+            &self.rustc.output.as_ref().map(|o| (&o.stderr)),
         ) {
             differences.push(Difference::Stderr(stderr_diff.0, stderr_diff.1));
         }

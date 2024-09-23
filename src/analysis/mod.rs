@@ -1,9 +1,7 @@
 pub mod compare;
 pub mod executor;
-
 use compare::{Comparison, ComparisonResult};
 use executor::{ExecutionContext, ExecutionError};
-use log::info;
 use std::path::Path;
 use std::time::Duration;
 use thiserror::Error;

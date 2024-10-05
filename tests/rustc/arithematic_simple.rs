@@ -10,12 +10,10 @@ fn print_unary_result(op: &str, rhs: i32, result: i32) {
     println!("{}", format!("{} {} = {}", op, rhs, result));
 }
 
-// Unary operators
 fn negation(value: i32) -> i32 {
     -value
 }
 
-// Binary operators
 fn add(first: i32, second: i32) -> i32 {
     first + second
 }
@@ -39,7 +37,6 @@ fn modulus(first: i32, second: i32) -> i32 {
 fn simple_arithmetic_tests() {
     print_label("Simple Arithmetic Tests:");
 
-    // Testing addition
     let additions = [
         (1, 1),
         (2, 2),
@@ -60,7 +57,6 @@ fn simple_arithmetic_tests() {
         print_binary_result(a, "+", b, add(a, b));
     }
 
-    // Testing subtraction
     let subtractions = [
         (5, 3),
         (3, 5),
@@ -79,7 +75,6 @@ fn simple_arithmetic_tests() {
         print_binary_result(a, "-", b, subtract(a, b));
     }
 
-    // Testing multiplication
     let multiplications = [
         (5, 3),
         (0, 5),
@@ -98,7 +93,6 @@ fn simple_arithmetic_tests() {
         print_binary_result(a, "*", b, multiply(a, b));
     }
 
-    // Testing division
     let divisions = [
         (10, 2),
         (5, 5),
@@ -115,7 +109,6 @@ fn simple_arithmetic_tests() {
         print_binary_result(a, "/", b, divide(a, b));
     }
 
-    // Testing modulus
     let moduli = [
         (10, 3),
         (20, 7),
@@ -131,7 +124,6 @@ fn simple_arithmetic_tests() {
         print_binary_result(a, "%", b, modulus(a, b));
     }
 
-    // Testing negation
     let negation_cases = [1, -1, 0, 100, -100];
 
     for a in negation_cases {

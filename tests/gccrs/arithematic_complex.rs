@@ -62,84 +62,83 @@ fn modulus(first: i32, second: i32) -> i32 {
     first % second
 }
 
-fn simple_arithmetic_tests() {
-    print_label("Simple Arithmetic Tests:");
+fn complex_arithmetic_tests() {
+    const MAX: i32 = 2147483647;
+    const MIN: i32 = -2147483648;
+
+    print_label("Complex Integer Arithmetic Tests:");
 
     let additions = [
-        (1, 1),
-        (2, 2),
-        (3, 5),
-        (10, 20),
+        (0, 1000),
+        (123456789, -987654321),
+        (-12345, 54321),
+        (1, -1),
         (0, 0),
-        (5, -3),
-        (-5, 3),
+        (MAX, -1),
+        (MIN, 1),
         (100, 200),
         (-100, -200),
-        (0, 100),
-        (50, 50),
-        (100, -50),
-        (-100, 100),
+        (MAX / 2, MAX / 2),
     ];
 
     let mut index = 0;
-    while index < 13 {
+    while index < 10 {
         let (a, b) = additions[index];
         print_binary_result(a, "+", b, add(a, b));
         index += 1;
     }
 
     let subtractions = [
-        (5, 3),
-        (3, 5),
-        (0, 0),
+        (123456, 654321),
+        (-999999, 999999),
+        (0, 1000),
+        (1000, 0),
+        (-1000, -1000),
+        (MAX, 1),
+        (MIN, -1),
         (100, 50),
-        (50, 50),
-        (-5, -5),
-        (-10, -5),
-        (5, 10),
-        (10, 0),
-        (1, 0),
-        (0, 1),
+        (-100, 50),
+        (MIN, MIN / 2),
     ];
 
     let mut index = 0;
-    while index < 11 {
+    while index < 10 {
         let (a, b) = subtractions[index];
         print_binary_result(a, "-", b, subtract(a, b));
         index += 1;
     }
 
     let multiplications = [
-        (5, 3),
-        (0, 5),
-        (1, 100),
-        (-5, 3),
-        (-1, -1),
-        (100, 100),
-        (1024, 1024),
-        (1000, 0),
-        (10, -10),
-        (-10, 10),
-        (-2, -2),
+        (0, 1000),
+        (-1000, 1000),
+        (-12345, 54321),
+        (1, -1),
+        (MAX, 1),
+        (MAX, -1),
+        (MIN, 1),
+        (100, 0),
+        (MAX / 2, 2),
+        (-MAX / 2, -2),
     ];
 
     let mut index = 0;
-    while index < 11 {
+    while index < 10 {
         let (a, b) = multiplications[index];
         print_binary_result(a, "*", b, multiply(a, b));
         index += 1;
     }
 
     let divisions = [
-        (10, 2),
-        (5, 5),
-        (100, 10),
-        (2147483647, 1),
-        (-10, 2),
-        (10, -2),
-        (0, 1),
-        (-100, -10),
-        (100, -5),
+        (MAX, 2),
+        (1000, 100),
+        (-1000, 100),
+        (1000, -100),
+        (MAX, 1),
+        (MIN, 1),
+        (MAX, -1),
+        // (MIN, -1),
+        (100, 50),
+        (-1000, 10),
     ];
 
     let mut index = 0;
@@ -150,34 +149,47 @@ fn simple_arithmetic_tests() {
     }
 
     let moduli = [
-        (10, 3),
-        (20, 7),
-        (7, 3),
-        (0, 1),
-        (5, 5),
-        (-10, 3),
-        (2147483647, 3),
-        (-20, -3),
+        (MAX, 2),
+        (100, 3),
+        (-100, 3),
+        (MAX, -2),
+        (1000, -100),
+        (MIN, 2),
+        (MIN, -2),
+        (MAX, 3),
+        (1000, 100),
+        (-1000, 100),
     ];
 
     let mut index = 0;
-    while index < 8 {
+    while index < 10 {
         let (a, b) = moduli[index];
         print_binary_result(a, "%", b, modulus(a, b));
         index += 1;
     }
 
-    let negation_cases = [1, -1, 0, 100, -100];
+    let negations = [
+        MAX,
+        0,
+        1,
+        -1,
+        123456789,
+        -123456789,
+        // MIN,
+        100,
+        -100,
+        MAX / 2,
+    ];
 
     let mut index = 0;
-    while index < 5 {
-        let a = negation_cases[index];
+    while index < 9 {
+        let a = negations[index];
         print_unary_result("-", a, negation(a));
         index += 1;
     }
 }
 
 fn main() -> i32 {
-    simple_arithmetic_tests();
+    complex_arithmetic_tests();
     0
 }

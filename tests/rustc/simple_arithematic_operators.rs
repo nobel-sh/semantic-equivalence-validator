@@ -1,4 +1,4 @@
-pub fn print_label(label: &str) {
+fn print_label(label: &str) {
     println!("{}", label);
 }
 

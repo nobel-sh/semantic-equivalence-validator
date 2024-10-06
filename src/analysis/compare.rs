@@ -51,8 +51,8 @@ impl fmt::Display for ComparisonResult {
                         writeln!(
                             f,
                             "\n=== Stdout Difference ===\n\
-                             gccrs:\n  {}\n\
-                             rustc:\n  {}\n",
+                             gccrs:\n{}\n\
+                             rustc:\n{}\n",
                             if gccrs_stdout.is_empty() {
                                 "(empty)"
                             } else {
@@ -69,8 +69,8 @@ impl fmt::Display for ComparisonResult {
                         writeln!(
                             f,
                             "\n=== Stderr Difference ===\n\
-                             gccrs:\n  {}\n\
-                             rustc:\n  {}\n",
+                             gccrs:\n{}\n\
+                             rustc:\n{}\n",
                             if gccrs_stderr.is_empty() {
                                 "(empty)"
                             } else {
@@ -121,14 +121,30 @@ impl Comparison {
             differences.push(Difference::Stdout(stdout_diff.0, stdout_diff.1));
         }
 
-        if let Some(stderr_diff) = self.compare_output(
-            &self.gccrs.output.as_ref().map(|o| (&o.stderr)),
-            &self.rustc.output.as_ref().map(|o| (&o.stderr)),
-        ) {
+        if let Some(stderr_diff) = self.compare_stderr() {
             differences.push(Difference::Stderr(stderr_diff.0, stderr_diff.1));
         }
 
         ComparisonResult { differences }
+    }
+
+    /// Check only if error exists or not but we dont compare
+    /// the error messages as error messages may differ.
+    fn compare_stderr(&self) -> Option<(String, String)> {
+        let gccrs_stderr = self.gccrs.output.as_ref().map(|o| &o.stderr);
+        let rustc_stderr = self.rustc.output.as_ref().map(|o| &o.stderr);
+
+        let gccrs_has_error = gccrs_stderr.map_or(false, |stderr| !stderr.is_empty());
+        let rustc_has_error = rustc_stderr.map_or(false, |stderr| !stderr.is_empty());
+
+        if gccrs_has_error != rustc_has_error {
+            Some((
+                Self::format_output(&gccrs_stderr),
+                Self::format_output(&rustc_stderr),
+            ))
+        } else {
+            None
+        }
     }
 
     fn compare_timeouts(&self) -> Option<(bool, bool)> {

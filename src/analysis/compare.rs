@@ -1,4 +1,6 @@
 use super::executor::ExecutionResult;
+use colored::*;
+use similar::{ChangeTag, TextDiff};
 use std::fmt;
 
 #[derive(Debug, PartialEq)]
@@ -30,58 +32,25 @@ impl fmt::Display for ComparisonResult {
             for diff in &self.differences {
                 match diff {
                     Difference::Timeout(gccrs_timed_out, rustc_timed_out) => {
+                        writeln!(f, "{}", "=== Timeout Difference ===".bold())?;
                         writeln!(
                             f,
-                            "\n=== Timeout Difference ===\n\
-                             gccrs timed out: {}\n\
+                            "gccrs timed out: {}\n
                              rustc timed out: {}\n",
                             gccrs_timed_out, rustc_timed_out
                         )?;
                     }
                     Difference::ExitCode(gccrs_exit, rustc_exit) => {
-                        writeln!(
-                            f,
-                            "\n=== Exit Code Difference ===\n\
-                             gccrs: {}\n\
-                             rustc: {}\n",
-                            gccrs_exit, rustc_exit
-                        )?;
+                        writeln!(f, "\n{}", "=== Exit Code Difference ===".bold())?;
+                        writeln!(f, "gccrs: {}\nrustc: {}\n", gccrs_exit, rustc_exit)?;
                     }
                     Difference::Stdout(gccrs_stdout, rustc_stdout) => {
-                        writeln!(
-                            f,
-                            "\n=== Stdout Difference ===\n\
-                             gccrs:\n{}\n\
-                             rustc:\n{}\n",
-                            if gccrs_stdout.is_empty() {
-                                "(empty)"
-                            } else {
-                                gccrs_stdout
-                            },
-                            if rustc_stdout.is_empty() {
-                                "(empty)"
-                            } else {
-                                rustc_stdout
-                            }
-                        )?;
+                        writeln!(f, "{}", "=== Stdout Difference ===".bold())?;
+                        print_diff(f, gccrs_stdout, rustc_stdout)?;
                     }
                     Difference::Stderr(gccrs_stderr, rustc_stderr) => {
-                        writeln!(
-                            f,
-                            "\n=== Stderr Difference ===\n\
-                             gccrs:\n{}\n\
-                             rustc:\n{}\n",
-                            if gccrs_stderr.is_empty() {
-                                "(empty)"
-                            } else {
-                                gccrs_stderr
-                            },
-                            if rustc_stderr.is_empty() {
-                                "(empty)"
-                            } else {
-                                rustc_stderr
-                            }
-                        )?;
+                        writeln!(f, "{}", "=== Stderr Difference ===".bold())?;
+                        print_diff(f, gccrs_stderr, rustc_stderr)?;
                     }
                 }
             }
@@ -90,6 +59,48 @@ impl fmt::Display for ComparisonResult {
         }
         Ok(())
     }
+}
+
+
+fn print_diff(f: &mut fmt::Formatter<'_>, rustc: &str, gccrs: &str) -> fmt::Result {
+    let diff = TextDiff::from_lines(rustc, gccrs);
+
+    for group in diff.grouped_ops(3).iter() {
+        let rustc_fmt = format!("+ rustc");
+        let gccrs_fmt = format!("- gccrs");
+        writeln!(f, "Legend: {}, {}", rustc_fmt.green(), gccrs_fmt.red())?;
+        for op in group {
+            for change in diff.iter_changes(op) {
+                let line_number = change
+                    .old_index()
+                    .map_or_else(|| change.new_index().map(|i| i + 1), |i| Some(i + 1));
+
+                match change.tag() {
+                    ChangeTag::Delete => {
+                        write!(
+                            f,
+                            "{:4} - | {}",
+                            line_number.unwrap_or(0).to_string().red(),
+                            change.to_string().red()
+                        )?;
+                    }
+                    ChangeTag::Insert => {
+                        write!(
+                            f,
+                            "{:4} + | {}",
+                            line_number.unwrap_or(0).to_string().green(),
+                            change.to_string().green()
+                        )?;
+                    }
+                    ChangeTag::Equal => {
+                        write!(f, "{:4}   | {}", line_number.unwrap_or(0), change)?;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub struct Comparison {

@@ -159,7 +159,7 @@ fn compile_and_analyze_case(
         let gccrs_binary = Path::new(&gccrs_bin_name);
         let rustc_binary = Path::new(&rustc_bin_name);
 
-        let testname = case.name.clone() + " with optimization=" + level_str;
+        let testname = case.name.clone() + " with opt-level = " + level_str;
         let context = AnalysisContext::new(testname.clone(), gccrs_binary, rustc_binary, timeout);
         let start = Instant::now();
         let result = context.analyze();

@@ -8,7 +8,7 @@ mod utils;
 
 use crate::analysis::{AnalysisContext, AnalysisError};
 use crate::cli::{Cli, Mode};
-use crate::compiler::{compile_with, CompilerKind};
+use crate::compiler::{compile_with, CompilerKind, OPTIMIZATION_LEVELS};
 use crate::config::{AppConfig, ConfigError};
 use crate::reporting::{ErrorReporter, Report};
 use crate::testsuite::{TestCase, TestSuite, TestSuiteError};
@@ -82,19 +82,10 @@ fn run_app() -> Result<(), AppError> {
 
 fn run_file(rustc: &Path, gccrs: &Path, config: &AppConfig) -> Result<(), AppError> {
     let testsuite = TestSuite::from_file(rustc, gccrs)?;
-    let gccrs_binary = Path::new("out/gccrs.out");
-    let rustc_binary = Path::new("out/rustc.out");
     let timeout = Duration::from_secs(ANALYSIS_TIMEOUT);
 
     let mut report = Report::new();
-    compile_and_analyze_case(
-        &testsuite.cases[0],
-        config,
-        gccrs_binary,
-        rustc_binary,
-        timeout,
-        &mut report,
-    );
+    compile_and_analyze_case(&testsuite.cases[0], config, timeout, &mut report);
 
     report.print_summary();
     Ok(())
@@ -106,20 +97,11 @@ fn run_directory(path: &Path, config: &AppConfig) -> Result<(), AppError> {
     info!("Validating [{}] test cases", testsuite.size);
 
     let timeout = Duration::from_secs(ANALYSIS_TIMEOUT);
-    let gccrs_binary = Path::new("out/gccrs.out");
-    let rustc_binary = Path::new("out/rustc.out");
 
     let mut report = Report::new();
 
     for case in &testsuite.cases {
-        compile_and_analyze_case(
-            case,
-            config,
-            gccrs_binary,
-            rustc_binary,
-            timeout,
-            &mut report,
-        );
+        compile_and_analyze_case(case, config, timeout, &mut report);
     }
 
     report.print_summary();
@@ -134,8 +116,6 @@ fn run_directory(path: &Path, config: &AppConfig) -> Result<(), AppError> {
 fn compile_and_analyze_case(
     case: &TestCase,
     config: &AppConfig,
-    gccrs_binary: &Path,
-    rustc_binary: &Path,
     timeout: Duration,
     report: &mut Report,
 ) {
@@ -164,13 +144,18 @@ fn compile_and_analyze_case(
     }
 
     info!("Starting analysis for case '{}' ...", case.name);
-    let context = AnalysisContext::new(case.name.clone(), gccrs_binary, rustc_binary, timeout);
 
-    let start = Instant::now();
-    let result = context.analyze();
-    let duration = start.elapsed();
-
-    report.add_result(case.name.clone(), result, duration);
+    for level in &OPTIMIZATION_LEVELS {
+        let gccrs_bin_name = format!("out/gccrs_{}.out", level.numeric());
+        let rustc_bin_name = format!("out/rustc_{}.out", level.numeric());
+        let gccrs_binary = Path::new(&gccrs_bin_name);
+        let rustc_binary = Path::new(&rustc_bin_name);
+        let context = AnalysisContext::new(case.name.clone(), gccrs_binary, rustc_binary, timeout);
+        let start = Instant::now();
+        let result = context.analyze();
+        let duration = start.elapsed();
+        report.add_result(case.name.clone(), result, duration);
+    }
 }
 
 fn compile_with_compiler(
@@ -179,5 +164,5 @@ fn compile_with_compiler(
     args: &[String],
     kind: CompilerKind,
 ) -> Result<(), String> {
-    compile_with(compiler_path, input_file, args, kind.clone()).map_err(|e| e.to_string())
+    compile_with(compiler_path, input_file, args, kind).map_err(|e| e.to_string())
 }

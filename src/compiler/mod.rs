@@ -1,41 +1,39 @@
+mod optimization;
+
 use crate::AppError;
 use log::info;
-use std::path::{Path, PathBuf};
+pub use optimization::Optimization;
+use std::path::Path;
 use std::process::Command;
-use thiserror::Error;
 
-#[derive(Debug, Clone)]
+
+pub const OPTIMIZATION_LEVELS: [Optimization; 6] = [
+    Optimization::Zero,
+    Optimization::One,
+    Optimization::Two,
+    Optimization::Three,
+    Optimization::S,
+    Optimization::Z,
+];
+
+#[derive(Debug, Clone, Copy)]
 pub enum CompilerKind {
     Rustc,
     Gccrs,
 }
 
-#[derive(Debug, Error)]
-pub enum CompilerError {
-    #[error("Compilation Error on {compiler}:\n {message}")]
-    CompilationError { compiler: String, message: String },
-
-    #[error("Execution Error on {compiler}:\n {message}")]
-    ExecutionError { compiler: String, message: String },
-}
-
-pub struct CompilationOutput {}
-
 impl CompilerKind {
-    fn name(&self) -> &'static str {
+    fn name(self) -> &'static str {
         match self {
-            CompilerKind::Rustc => "rustc",
-            CompilerKind::Gccrs => "gccrs",
+            Self::Rustc => "rustc",
+            Self::Gccrs => "gccrs",
         }
     }
 }
 
 impl std::fmt::Display for CompilerKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CompilerKind::Rustc => write!(f, "rustc"),
-            CompilerKind::Gccrs => write!(f, "gccrs"),
-        }
+        f.write_str(self.name())
     }
 }
 
@@ -43,28 +41,35 @@ pub fn compile_with(
     compiler: &Path,
     src_file_path: &Path,
     args: &[String],
-    compiler_type: CompilerKind,
+    compiler_kind: CompilerKind,
 ) -> Result<(), AppError> {
     info!(
         "Compiling '{}' with {}",
         src_file_path.display(),
-        compiler_type.name()
+        compiler_kind
     );
 
-    let output = Command::new(compiler)
-        .arg(src_file_path)
-        .args(args)
-        .output()
-        .map_err(|e| AppError::Io {
-            file: src_file_path.to_path_buf(),
-            error: e,
-        })?;
+    for level in &OPTIMIZATION_LEVELS {
+        let binary_path = format!("out/{}_{}.out", compiler_kind.name(), level.numeric());
+        let output = Command::new(compiler)
+            .arg(src_file_path)
+            .args(args)
+            .args(level.for_compiler(compiler_kind))
+            .arg("-o")
+            .arg(&binary_path)
+            .output()
+            .map_err(|e| AppError::Io {
+                file: src_file_path.to_path_buf(),
+                error: e,
+            })?;
 
-    if !output.status.success() {
-        return Err(AppError::Compilation {
-            compiler: compiler_type.name().to_string(),
-            message: String::from_utf8_lossy(&output.stderr).to_string(),
-        });
+        if !output.status.success() {
+            return Err(AppError::Compilation {
+                compiler: compiler_kind.name().to_string(),
+                message: String::from_utf8_lossy(&output.stderr).to_string(),
+            });
+        }
     }
+
     Ok(())
 }

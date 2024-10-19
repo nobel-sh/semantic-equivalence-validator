@@ -8,7 +8,7 @@ mod utils;
 
 use crate::analysis::{AnalysisContext, AnalysisError};
 use crate::cli::{Cli, Mode};
-use crate::compiler::{compile_with, CompilerKind, OPTIMIZATION_LEVELS};
+use crate::compiler::{compile_with, CompilerKind, Optimization, OPTIMIZATION_LEVELS};
 use crate::config::{AppConfig, ConfigError};
 use crate::reporting::{ErrorReporter, Report};
 use crate::testsuite::{TestCase, TestSuite, TestSuiteError};
@@ -75,23 +75,23 @@ fn run_app() -> Result<(), AppError> {
 
     let args = Cli::parse();
     match args.mode {
-        Mode::File { rustc, gccrs } => run_file(&rustc, &gccrs, &config),
-        Mode::Dir { path } => run_directory(&path, &config),
+        Mode::File { rustc, gccrs } => run_file(&rustc, &gccrs, &config, args.no_opt),
+        Mode::Dir { path } => run_directory(&path, &config, args.no_opt),
     }
 }
 
-fn run_file(rustc: &Path, gccrs: &Path, config: &AppConfig) -> Result<(), AppError> {
+fn run_file(rustc: &Path, gccrs: &Path, config: &AppConfig, no_opt: bool) -> Result<(), AppError> {
     let testsuite = TestSuite::from_file(rustc, gccrs)?;
     let timeout = Duration::from_secs(ANALYSIS_TIMEOUT);
 
     let mut report = Report::new();
-    compile_and_analyze_case(&testsuite.cases[0], config, timeout, &mut report);
+    compile_and_analyze_case(&testsuite.cases[0], config, timeout, &mut report, no_opt);
 
     report.print_summary();
     Ok(())
 }
 
-fn run_directory(path: &Path, config: &AppConfig) -> Result<(), AppError> {
+fn run_directory(path: &Path, config: &AppConfig, no_opt: bool) -> Result<(), AppError> {
     info!("Running on '{}' directory", path.display());
     let testsuite = TestSuite::from_dir(path)?;
     info!("Validating [{}] test cases", testsuite.size);
@@ -101,7 +101,7 @@ fn run_directory(path: &Path, config: &AppConfig) -> Result<(), AppError> {
     let mut report = Report::new();
 
     for case in &testsuite.cases {
-        compile_and_analyze_case(case, config, timeout, &mut report);
+        compile_and_analyze_case(case, config, timeout, &mut report, no_opt);
     }
 
     report.print_summary();
@@ -118,6 +118,7 @@ fn compile_and_analyze_case(
     config: &AppConfig,
     timeout: Duration,
     report: &mut Report,
+    no_opt: bool,
 ) {
     if let Err(e) = compile_with_compiler(
         &config.rustc.path,
@@ -145,7 +146,13 @@ fn compile_and_analyze_case(
 
     info!("Starting analysis for case '{}' ...", case.name);
 
-    for level in &OPTIMIZATION_LEVELS {
+    let optimization_levels = if no_opt {
+        vec![Optimization::Zero]
+    } else {
+        OPTIMIZATION_LEVELS.to_vec()
+    };
+
+    for level in optimization_levels {
         let level_str = level.as_str();
         let gccrs_bin_name = format!("out/gccrs_{}.out", level_str);
         let rustc_bin_name = format!("out/rustc_{}.out", level_str);

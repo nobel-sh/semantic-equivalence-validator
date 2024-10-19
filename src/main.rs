@@ -146,15 +146,18 @@ fn compile_and_analyze_case(
     info!("Starting analysis for case '{}' ...", case.name);
 
     for level in &OPTIMIZATION_LEVELS {
-        let gccrs_bin_name = format!("out/gccrs_{}.out", level.numeric());
-        let rustc_bin_name = format!("out/rustc_{}.out", level.numeric());
+        let level_str = level.as_str();
+        let gccrs_bin_name = format!("out/gccrs_{}.out", level_str);
+        let rustc_bin_name = format!("out/rustc_{}.out", level_str);
         let gccrs_binary = Path::new(&gccrs_bin_name);
         let rustc_binary = Path::new(&rustc_bin_name);
-        let context = AnalysisContext::new(case.name.clone(), gccrs_binary, rustc_binary, timeout);
+
+        let testname = case.name.clone() + " with optimization=" + level_str;
+        let context = AnalysisContext::new(testname.clone(), gccrs_binary, rustc_binary, timeout);
         let start = Instant::now();
         let result = context.analyze();
         let duration = start.elapsed();
-        report.add_result(case.name.clone(), result, duration);
+        report.add_result(testname, result, duration);
     }
 }
 

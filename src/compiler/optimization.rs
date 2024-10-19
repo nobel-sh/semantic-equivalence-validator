@@ -11,7 +11,7 @@ pub enum Optimization {
 }
 
 impl Optimization {
-    pub fn numeric(self) -> &'static str{
+    pub fn as_str(self) -> &'static str{
         match self {
             Self::Zero => "0",
             Self::One => "1",
@@ -24,8 +24,8 @@ impl Optimization {
 
     pub fn for_compiler(self, compiler: CompilerKind) -> Vec<String> {
         match compiler {
-            CompilerKind::Gccrs => vec![format!("-O{}", self.numeric())],
-            CompilerKind::Rustc => vec!["-C".to_string(), format!("opt-level={}", self.numeric())],
+            CompilerKind::Gccrs => vec![format!("-O{}", self.as_str())],
+            CompilerKind::Rustc => vec!["-C".to_string(), format!("opt-level={}", self.as_str())],
         }
     }
 }

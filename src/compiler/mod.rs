@@ -50,7 +50,7 @@ pub fn compile_with(
     );
 
     for level in &OPTIMIZATION_LEVELS {
-        let binary_path = format!("out/{}_{}.out", compiler_kind.name(), level.numeric());
+        let binary_path = format!("out/{}_{}.out", compiler_kind.name(), level.as_str());
         let output = Command::new(compiler)
             .arg(src_file_path)
             .args(args)

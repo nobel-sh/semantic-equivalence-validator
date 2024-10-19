@@ -74,10 +74,10 @@ impl Report {
             println!("{}", "Successful Tests:".bold().green());
             println!("{}", "-".repeat(40).dimmed());
             for result in &self.analysis_reports {
-                if let Ok(_) = result.result {
+                if result.result.is_ok() {
                     println!(
                         "{} : {} [{}]",
-                        format!("{}", result.test_name).bold(),
+                        result.test_name.to_string().bold(),
                         "Passed".green(),
                         format!("Duration: {:.2?}", result.duration).yellow()
                     );
@@ -89,7 +89,10 @@ impl Report {
             println!("{}", "-".repeat(40).dimmed());
             for result in &self.analysis_reports {
                 if let Err(e) = &result.result {
-                    println!("{}", format!("Error report for '{}': ", result.test_name).bold());
+                    println!(
+                        "{}",
+                        format!("Error report for '{}': ", result.test_name).bold()
+                    );
                     match e {
                         AnalysisError::Execution(exec_error) => {
                             println!("{}", "Execution Error".red());
@@ -100,7 +103,7 @@ impl Report {
                             println!("{}", comparison_result);
                         }
                     }
-                    println!("{}",format!("Duration: {:.2?}", result.duration).yellow());
+                    println!("{}", format!("Duration: {:.2?}", result.duration).yellow());
                     println!("{}", "-".repeat(40).dimmed());
                 }
             }

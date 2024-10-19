@@ -1,14 +1,10 @@
 [rustc]
-path = "/usr/bin/rustc" # path to rustc
-args = [
-      "-o",
-      "out/rustc.out"
-    ]
+path = "/home/nobel/.cargo/bin/rustc" # path to rustc
+args = [ # any additional args that might be required
+]
 
 [gccrs]
-path = "/home/nobel/gccrs-install/bin/gccrs" # path to gccrs
-args = [
-      "-frust-incomplete-and-experimental-compiler-do-not-use",
-      "-o",
-      "out/gccrs.out"
-    ]
+path = "/usr/local/bin/gccrs" # path to gccrs
+args = [ # any additional args that might be required
+     "-frust-incomplete-and-experimental-compiler-do-not-use"
+]

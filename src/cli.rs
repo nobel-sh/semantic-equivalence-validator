@@ -6,6 +6,10 @@ use std::path::PathBuf;
 pub struct Cli {
     #[command(subcommand)]
     pub mode: Mode,
+
+    /// Run only with optmizations turned off (equivalent to Optimization::Zero)
+    #[arg(long, default_value_t = false)]
+    pub no_opt: bool,
 }
 
 #[derive(Subcommand)]

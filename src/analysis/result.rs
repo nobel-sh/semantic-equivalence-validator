@@ -73,8 +73,8 @@ fn print_diff(f: &mut fmt::Formatter<'_>, rustc: &str, gccrs: &str) -> fmt::Resu
         writeln!(
             f,
             "Legend: {}, {}",
-            format!("- gccrs").red(),
-            format!("+ rustc").green()
+            "- gccrs".to_string().red(),
+            "+ rustc".to_string().green()
         )?;
 
         for op in group {

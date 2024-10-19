@@ -3,10 +3,10 @@ mod context;
 mod executor;
 mod result;
 
-pub use executor::ExecutionError;
 pub use context::AnalysisContext;
-pub use thiserror::Error;
+pub use executor::ExecutionError;
 pub use result::AnalysisResult;
+pub use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum AnalysisError {

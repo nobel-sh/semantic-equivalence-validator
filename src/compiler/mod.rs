@@ -6,7 +6,6 @@ pub use optimization::Optimization;
 use std::path::Path;
 use std::process::Command;
 
-
 pub const OPTIMIZATION_LEVELS: [Optimization; 6] = [
     Optimization::Zero,
     Optimization::One,

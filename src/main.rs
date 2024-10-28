@@ -8,7 +8,7 @@ mod utils;
 
 use crate::analysis::{AnalysisContext, AnalysisError};
 use crate::cli::{Cli, Mode};
-use crate::compiler::{compile_with, CompilerKind};
+use crate::compiler::{compile_with, CompilerKind, Optimization, OPTIMIZATION_LEVELS};
 use crate::config::{AppConfig, ConfigError};
 use crate::reporting::{ErrorReporter, Report};
 use crate::testsuite::{TestCase, TestSuite, TestSuiteError};
@@ -75,51 +75,33 @@ fn run_app() -> Result<(), AppError> {
 
     let args = Cli::parse();
     match args.mode {
-        Mode::File { rustc, gccrs } => run_file(&rustc, &gccrs, &config),
-        Mode::Dir { path } => run_directory(&path, &config),
+        Mode::File { rustc, gccrs } => run_file(&rustc, &gccrs, &config, args.no_opt),
+        Mode::Dir { path } => run_directory(&path, &config, args.no_opt),
     }
 }
 
-fn run_file(rustc: &Path, gccrs: &Path, config: &AppConfig) -> Result<(), AppError> {
+fn run_file(rustc: &Path, gccrs: &Path, config: &AppConfig, no_opt: bool) -> Result<(), AppError> {
     let testsuite = TestSuite::from_file(rustc, gccrs)?;
-    let gccrs_binary = Path::new("out/gccrs.out");
-    let rustc_binary = Path::new("out/rustc.out");
     let timeout = Duration::from_secs(ANALYSIS_TIMEOUT);
 
     let mut report = Report::new();
-    compile_and_analyze_case(
-        &testsuite.cases[0],
-        config,
-        gccrs_binary,
-        rustc_binary,
-        timeout,
-        &mut report,
-    );
+    compile_and_analyze_case(&testsuite.cases[0], config, timeout, &mut report, no_opt);
 
     report.print_summary();
     Ok(())
 }
 
-fn run_directory(path: &Path, config: &AppConfig) -> Result<(), AppError> {
+fn run_directory(path: &Path, config: &AppConfig, no_opt: bool) -> Result<(), AppError> {
     info!("Running on '{}' directory", path.display());
     let testsuite = TestSuite::from_dir(path)?;
     info!("Validating [{}] test cases", testsuite.size);
 
     let timeout = Duration::from_secs(ANALYSIS_TIMEOUT);
-    let gccrs_binary = Path::new("out/gccrs.out");
-    let rustc_binary = Path::new("out/rustc.out");
 
     let mut report = Report::new();
 
     for case in &testsuite.cases {
-        compile_and_analyze_case(
-            case,
-            config,
-            gccrs_binary,
-            rustc_binary,
-            timeout,
-            &mut report,
-        );
+        compile_and_analyze_case(case, config, timeout, &mut report, no_opt);
     }
 
     report.print_summary();
@@ -134,10 +116,9 @@ fn run_directory(path: &Path, config: &AppConfig) -> Result<(), AppError> {
 fn compile_and_analyze_case(
     case: &TestCase,
     config: &AppConfig,
-    gccrs_binary: &Path,
-    rustc_binary: &Path,
     timeout: Duration,
     report: &mut Report,
+    no_opt: bool,
 ) {
     if let Err(e) = compile_with_compiler(
         &config.rustc.path,
@@ -164,13 +145,27 @@ fn compile_and_analyze_case(
     }
 
     info!("Starting analysis for case '{}' ...", case.name);
-    let context = AnalysisContext::new(case.name.clone(), gccrs_binary, rustc_binary, timeout);
 
-    let start = Instant::now();
-    let result = context.analyze();
-    let duration = start.elapsed();
+    let optimization_levels = if no_opt {
+        vec![Optimization::Zero]
+    } else {
+        OPTIMIZATION_LEVELS.to_vec()
+    };
 
-    report.add_result(case.name.clone(), result, duration);
+    for level in optimization_levels {
+        let level_str = level.as_str();
+        let gccrs_bin_name = format!("out/gccrs_{}.out", level_str);
+        let rustc_bin_name = format!("out/rustc_{}.out", level_str);
+        let gccrs_binary = Path::new(&gccrs_bin_name);
+        let rustc_binary = Path::new(&rustc_bin_name);
+
+        let testname = case.name.clone() + " with opt-level = " + level_str;
+        let context = AnalysisContext::new(testname.clone(), gccrs_binary, rustc_binary, timeout);
+        let start = Instant::now();
+        let result = context.analyze();
+        let duration = start.elapsed();
+        report.add_result(testname, result, duration);
+    }
 }
 
 fn compile_with_compiler(
@@ -179,5 +174,5 @@ fn compile_with_compiler(
     args: &[String],
     kind: CompilerKind,
 ) -> Result<(), String> {
-    compile_with(compiler_path, input_file, args, kind.clone()).map_err(|e| e.to_string())
+    compile_with(compiler_path, input_file, args, kind).map_err(|e| e.to_string())
 }

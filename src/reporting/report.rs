@@ -13,6 +13,7 @@ pub struct Report {
     pub analysis_reports: Vec<AnalysisReport>,
     start_time: Instant,
 }
+
 #[derive(Debug)]
 pub struct AnalysisReport {
     pub test_name: String,
@@ -43,7 +44,6 @@ impl Report {
             Ok(_) => self.passed_tests += 1,
             Err(_) => self.failed_tests += 1,
         }
-
         self.analysis_reports.push(AnalysisReport {
             test_name,
             result,
@@ -69,23 +69,43 @@ impl Report {
 
         if !self.analysis_reports.is_empty() {
             println!("{}", "Analysis Results:".bold().underline().cyan());
+
+            println!("{}", "-".repeat(40).dimmed());
+            println!("{}", "Successful Tests:".bold().green());
+            println!("{}", "-".repeat(40).dimmed());
             for result in &self.analysis_reports {
-                println!("{}", "-".repeat(40).dimmed());
-                println!("{}", format!("Report for '{}': ", result.test_name).bold());
-                match &result.result {
-                    Ok(_) => println!("{}", "Passed".green()),
-                    Err(e) => match e {
+                if result.result.is_ok() {
+                    println!(
+                        "{} : {} [{}]",
+                        result.test_name.to_string().bold(),
+                        "Passed".green(),
+                        format!("Duration: {:.2?}", result.duration).yellow()
+                    );
+                }
+            }
+            println!("{}", "-".repeat(40).dimmed());
+
+            println!("{}", "Failed Tests:".bold().red());
+            println!("{}", "-".repeat(40).dimmed());
+            for result in &self.analysis_reports {
+                if let Err(e) = &result.result {
+                    println!(
+                        "{}",
+                        format!("Error report for '{}': ", result.test_name).bold()
+                    );
+                    match e {
                         AnalysisError::Execution(exec_error) => {
-                            println!("{}", format!("Execution Error: {}", exec_error).red())
+                            println!("{}", "Execution Error".red());
+                            println!("{}", exec_error);
                         }
                         AnalysisError::ComparisonFailed(comparison_result, _) => {
                             println!("{}", "Comparison Failed".red());
                             println!("{}", comparison_result);
                         }
-                    },
+                    }
+                    println!("{}", format!("Duration: {:.2?}", result.duration).yellow());
+                    println!("{}", "-".repeat(40).dimmed());
                 }
-                println!("Duration: {:.2?}", result.duration);
-                println!("{}", "-".repeat(40).dimmed());
             }
         }
 
@@ -105,7 +125,6 @@ impl Report {
             "Failed tests:".bold(),
             self.failed_tests.to_string().red()
         );
-
         let total_duration = self.start_time.elapsed();
         println!(
             "{} {}",

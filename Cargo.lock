@@ -260,6 +260,7 @@ dependencies = [
  "log",
  "serde",
  "serde_derive",
+ "similar",
  "thiserror",
  "toml",
  "wait-timeout",
@@ -293,6 +294,12 @@ checksum = "79e674e01f999af37c49f70a6ede167a8a60b2503e56c5599532a65baa5969a0"
 dependencies = [
  "serde",
 ]
+
+[[package]]
+name = "similar"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1de1d4f81173b03af4c0cbed3c898f6bff5b870e4a7f5d6f4057d62a7a4b686e"
 
 [[package]]
 name = "strsim"

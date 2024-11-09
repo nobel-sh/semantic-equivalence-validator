@@ -103,7 +103,6 @@ fn verify_sizeof() {
     };
     let struct_transparent = StructTransparent(struct_c);
 
-    println!("=== Sizes ===");
     println!("Vector3: {}", size_of::<Vector3>());
     println!("StructC: {}", size_of::<StructC>());
     println!("StructPacked: {}", size_of::<StructPacked>());

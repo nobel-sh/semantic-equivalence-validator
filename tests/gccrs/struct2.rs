@@ -99,7 +99,6 @@ fn verify_sizeof() {
     };
 
     unsafe {
-        printf("=== Sizes ===\n\0" as *const str as *const i8);
         printf(
             "Vector3: %zu\n\0" as *const str as *const i8,
             size_of::<Vector3>(),
